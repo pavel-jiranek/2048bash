@@ -14,6 +14,8 @@ declare     grid_row_loop_fwd
 declare     grid_row_loop_bwd
 declare     grid_loop
 
+declare -i  score
+
 declare -i  desktop_bg
 declare -i  grid_bg
 
@@ -134,7 +136,8 @@ function setup_environment {
 function draw_status {
     tput cup $((nrows-1)) 0
     tput setab $titstat_bg
-    printf "%${ncols}s" " "
+    tput setaf $titstat_fg
+    printf "%${ncols}s" "Score: $score "
     tput cup $((nrows-1)) 0
     tput setaf $titstat_highlight_fg; printf " asdw "; tput setaf $titstat_fg; printf "Move "
     tput setaf $titstat_highlight_fg; printf " R"; tput setaf $titstat_fg; printf "edraw UI "
@@ -216,14 +219,14 @@ function init_grid {
 function insert_random {
     # TODO Make a better choice of random positions
     # TODO to avoid the infinite while loop.
-    num=$1
-    values=($2)
-    num_f=$(num_free)
+    local num=$1
+    local values=($2)
+    local num_f=$(num_free)
     if [ "$num" -gt "$num_f" ]
     then
         num=$num_f
     fi
-    num_values=${#values[*]}
+    local num_values=${#values[*]}
     for i in $(seq 1 $num)
     do
         value=${values[$((RANDOM % num_values))]}
@@ -285,7 +288,7 @@ function draw_grid_frame {
 
 # Get the number of free fields.
 function num_free {
-    num=0
+    local num=0
     for i in ${!grid[*]}
     do
         if [ "${grid[$i]}" -eq "0" ]
@@ -325,11 +328,10 @@ function draw_grid {
 #
 # It echoes the score made by the merge and the new values.
 function merge_values {
-    values="$1"
-
-    score=0
-    new_values=
-    prev=0
+    local values="$1"
+    local mscore=0
+    local new_values=
+    local prev=0
     for val in $values; do
         if [ "$val" -eq "0" ]
         then
@@ -343,7 +345,7 @@ function merge_values {
             if [ "$val" -eq "$prev" ]
             then
                 new_values="$new_values $((val * 2))"
-                score=$((score + val * 2))
+                mscore=$(($mscore + $val * 2))
                 prev=0
             else
                 new_values="$new_values $prev"
@@ -357,7 +359,7 @@ function merge_values {
         new_values="$new_values $prev"
     fi
 
-    echo $new_values
+    echo "$mscore:$new_values"
 }
 
 # Get a column of the grid.
@@ -472,13 +474,16 @@ function set_row {
 
 # Make move.
 function make_move {
-    where=$1
+    local where=$1
     case $where in
         up)
             for col in $grid_col_loop_fwd
             do
                 values=$(get_col $col 0)
-                new_values=$(merge_values "$values")
+                stuff=$(merge_values "$values")
+                mscore=$(echo $stuff | cut -f1 -d':')
+                new_values=$(echo $stuff | cut -f2 -d':')
+                score=$((score + mscore))
                 set_col $col "$new_values" 0
             done
             ;;
@@ -486,7 +491,10 @@ function make_move {
             for col in $grid_col_loop_fwd
             do
                 values=$(get_col $col 1)
-                new_values=$(merge_values "$values")
+                stuff=$(merge_values "$values")
+                mscore=$(echo $stuff | cut -f1 -d':')
+                new_values=$(echo $stuff | cut -f2 -d':')
+                score=$((score + mscore))
                 set_col $col "$new_values" 1
             done
             ;;
@@ -494,7 +502,10 @@ function make_move {
             for row in $grid_row_loop_fwd
             do
                 values=$(get_row $row 0)
-                new_values=$(merge_values "$values")
+                stuff=$(merge_values "$values")
+                mscore=$(echo $stuff | cut -f1 -d':')
+                new_values=$(echo $stuff | cut -f2 -d':')
+                score=$((score + mscore))
                 set_row $row "$new_values" 0
             done
             ;;
@@ -502,20 +513,25 @@ function make_move {
             for row in $grid_row_loop_fwd
             do
                 values=$(get_row $row 1)
-                new_values=$(merge_values "$values")
+                stuff=$(merge_values "$values")
+                mscore=$(echo $stuff | cut -f1 -d':')
+                new_values=$(echo $stuff | cut -f2 -d':')
+                score=$((score + mscore))
                 set_row $row "$new_values" 1
             done
             ;;
     esac
     insert_random 2 "2 4"
     draw_grid
+    draw_status
 }
 
 # New game.
 function new_game {
-    draw_ui
+    score=0
     init_grid $1 $2
     insert_random 2 "2"
+    draw_ui
     draw_grid_frame
     draw_grid
 }
@@ -539,7 +555,7 @@ draw_ui
 setup_environment
 
 # Initialize the game.
-new_game 5 5
+new_game 6 6
 
 # The main control loop.
 while :
@@ -551,7 +567,7 @@ do
             d)  make_move right ;;
             w)  make_move up ;;
             s)  make_move down ;;
-            n)  new_game 4 4 ;;
+            n)  new_game 6 6 ;;
             r)  redraw ;;
             q)  quit ;;
         esac
