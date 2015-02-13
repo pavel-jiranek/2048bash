@@ -3,11 +3,16 @@
 declare -i  nrows
 declare -i  ncols
 declare -ia grid
-declare -i  grid_size_x
-declare -i  grid_size_y
+declare -i  grid_cols
+declare -i  grid_rows
 declare -i  grid_size
 declare -i  grid_start_left
 declare -i  grid_start_top
+declare     grid_col_loop_fwd
+declare     grid_col_loop_bwd
+declare     grid_row_loop_fwd
+declare     grid_row_loop_bwd
+declare     grid_loop
 
 declare -i  desktop_bg
 declare -i  grid_bg
@@ -16,17 +21,37 @@ declare -a  colors_fg
 declare -a  colors_bg
 declare -a  value_rep
 
-# Set some parameters.
-desktop_bg=230
-grid_bg=145
-grid_fg=246
+# Version
+version_major=0
+version_minor=0
+version_patch=1
 
-grid_start_left=6
-grid_start_top=4
+# Frame characters.
+LT='/'
+LM='|'
+LB='\'
+RT='\'
+RM='|'
+RB='/'
+CT='-'
+CM='+'
+CB='-'
+V='|'
+H='-'
+
+# Set some parameters.
+desktop_bg=0
+titstat_bg=39
+titstat_fg=226
+titstat_highlight_fg=206
+grid_bg=145
+grid_fg=0
+grid_start_col=6
+grid_start_row=4
 
 # Number colors.
-colors_fg[0]="$grid_fg";
-colors_bg[0]="$grid_bg";
+# TODO Instead of X use Y in X=2^Y, Bash can do powers!
+colors_fg[0]="$grid_fg";colors_bg[0]="$grid_bg";
 colors_fg[2]=234;       colors_bg[2]=255;
 colors_fg[4]=234;       colors_bg[4]=252;
 colors_fg[8]=255;       colors_bg[8]=215;
@@ -108,62 +133,89 @@ function setup_environment {
 # Draw the status bar.
 function draw_status {
     tput cup $((nrows-1)) 0
-    tput setab 39
+    tput setab $titstat_bg
     printf "%${ncols}s" " "
     tput cup $((nrows-1)) 0
-    tput setaf 206; printf " asdw "; tput setaf 226; printf "Move "
-    tput setaf 206; printf " R"; tput setaf 226; printf "edraw UI "
-    tput setaf 206; printf " Q"; tput setaf 226; printf "uit "
+    tput setaf $titstat_highlight_fg; printf " asdw "; tput setaf $titstat_fg; printf "Move "
+    tput setaf $titstat_highlight_fg; printf " R"; tput setaf $titstat_fg; printf "edraw UI "
+    tput setaf $titstat_highlight_fg; printf " Q"; tput setaf $titstat_fg; printf "uit "
+}
+
+# Ask for something in the status bar.
+function ask {
+    echo
 }
 
 # Status message.
 function status_msg {
     tput setab 124
     tput setaf 255
-    tput cup $(($nrows-1)) 0
+    tput cup $((nrows-1)) 0
     printf "%-${ncols}s" "$@"
     tput op
-    sleep 3
+    sleep 1
     draw_status
 }
 
-# Clean and quit the game.
+# Clean the mess and quit the game.
 function quit {
+    # ... Say Bye!
     status_msg "Bye!!!"
+    # ... Set the options of the terminal back.
     stty sane
+    # ... Clear color settings, make the cursor visible, and clear the screen
     tput op
     tput cnorm
     tput clear
+    # ... Then exit, ciao!
     exit
 }
 
-# Draw the UI (not the board etc.)
+# Draw the basic UI.
 function draw_ui {
-    nrows=$(tput lines)         # Get the terminal size.
+    # ... Get the terminal size.
+    nrows=$(tput lines)
     ncols=$(tput cols)
-    tput civis                  # Hide the cursor.
-    tput setab $desktop_bg      # Clear the screen.
+    # ... Hide the cursor.
+    tput civis
+    # ... Clear the screen.
+    tput setab $desktop_bg
     tput clear
-    tput setab 39               # Write the header.
-    tput setaf 226
-    printf "%${ncols}s"  " (c) Copyright 2015 Pavel Jiranek <pavel.jiranek@gmail.com> "
+    # ... Draw the header.
+    tput setab $titstat_bg
+    tput setaf $titstat_fg
     tput cup 0 0
-    printf " 2048 for Bash v1.0"
+    printf "%${ncols}s" " "
+    tput cup 0 0
+    printf " 2048 for Bash v%d.%d.%d" $version_major $version_minor $version_patch
+    # ... Draw the status bar (as a separate function since it may need to be
+    #     redrawed occasionally).
     draw_status
-    tput op                     # Reset colors.
+    # ... Reset colors.
+    tput op
 }
 
 # Initialize the grid.
 function init_grid {
-    grid_size_x=$1
-    grid_size_y=$2
-    grid_size=$((grid_size_x * grid_size_y))
+    # ... Set the number of columns and rows and the total grid size.
+    grid_cols=$1
+    grid_rows=$2
+    grid_size=$((grid_cols * grid_rows))
+    # ... Create the variables for looping (to avoid all to calls to seq).
+    grid_col_loop_fwd=$(seq 0 $((grid_cols-1)))
+    grid_col_loop_bwd=$(seq $((grid_cols-1)) -1 0)
+    grid_row_loop_fwd=$(seq 0 $((grid_rows-1)))
+    grid_row_loop_bwd=$(seq $((grid_rows-1)) -1 0)
+    grid_loop=$(seq 0 $((grid_size-1)))
+    # ... Fill the grid with zeros.
     grid=()
-    for i in $(seq 0 $((grid_size - 1))); do grid[$i]=0; done
+    for i in $grid_loop; do grid[$i]=0; done
 }
 
 # Insert random numbers to the grid.
 function insert_random {
+    # TODO Make a better choice of random positions
+    # TODO to avoid the infinite while loop.
     num=$1
     values=($2)
     num_f=$(num_free)
@@ -188,44 +240,44 @@ function insert_random {
 function draw_grid_frame {
     tput setaf $grid_fg
     tput setab $grid_bg
-    for i in $(seq 0 $((grid_size_x-1)))
+    for i in $grid_col_loop_fwd
     do
-        for j in $(seq 0 $((grid_size_y-1)))
+        for j in $grid_row_loop_fwd
         do
             if [ $i -eq 0 ]; then
                 if [ $j -eq 0 ]; then
-                    tl="┏"; tr="┳"; bl="┣"; br="╋"
-                elif [ $j -eq $((grid_size_y-1)) ]; then
-                    tl="┣"; tr="╋"; bl="┗"; br="$tr"
+                    tl="$LT"; tr="$CT"; bl="$LM"; br="$CM"
+                elif [ $j -eq $((grid_rows-1)) ]; then
+                    tl="$LM"; tr="$CM"; bl="$LB"; br="$tr"
                 else
-                    tl="┣"; tr="╋"; bl="$tl"; br="$tr"
+                    tl="$LM"; tr="$CM"; bl="$tl"; br="$tr"
                 fi
-            elif [ $i -eq $((grid_size_x-1)) ]; then
+            elif [ $i -eq $((grid_cols-1)) ]; then
                 if [ $j -eq 0 ]; then
-                    tl="┳"; tr="┓"; bl="╋"; br="┫"
-                elif [ $j -eq $((grid_size_y-1)) ]; then
-                    tl="╋"; tr="┫"; bl="┻"; br="┛"
+                    tl="$CT"; tr="$RT"; bl="$CM"; br="$RM"
+                elif [ $j -eq $((grid_rows-1)) ]; then
+                    tl="$CM"; tr="$LM"; bl="$CB"; br="$RB"
                 else
-                    tl="╋"; tr="┫"; bl="$tl"; br="$br"
+                    tl="$CM"; tr="$RM"; bl="$tl"; br="$br"
                 fi
             else
                 if [ $j -eq 0 ]; then
-                    tl="┳"; tr="┳"; bl="╋"; br="╋"
-                elif [ $j -eq $((grid_size_y-1)) ]; then
-                    tl="╋"; tr="╋"; bl="┻"; br="┻"
+                    tl="$CT"; tr="$tl"; bl="$CM"; br="$bl"
+                elif [ $j -eq $((grid_rows-1)) ]; then
+                    tl="$CM"; tr="$tl"; bl="$CB"; br="$bl"
                 else
-                    tl="╋"; tr="$tl"; bl="$tl"; br="$tl"
+                    tl="$CM"; tr="$tl"; bl="$tl"; br="$tl"
                 fi
             fi
 
-            x=$((grid_start_left + i * 5))
-            y=$((grid_start_top  + j * 2))
+            x=$((grid_start_col + i * 5))
+            y=$((grid_start_row  + j * 2))
             tput cup $y $x
-            printf "$tl━━━━$tr"
+            printf "%s" "$tl----$tr"
             tput cup $((y+1)) $x
-            printf "┃    ┃"
+            printf "%s" "$V    $V"
             tput cup $((y+2)) $x
-            printf "$bl━━━━$br"
+            printf "%s" "$bl----$br"
         done
     done
     tput op
@@ -246,13 +298,13 @@ function num_free {
 
 # Draw grid.
 function draw_grid {
-    for i in $(seq 0 $((grid_size_x-1)))
+    for i in $grid_col_loop_fwd
     do
-        for j in $(seq 0 $((grid_size_y-1)))
+        for j in $grid_row_loop_fwd
         do
-            k=$((grid_size_y * i + j))
-            x=$((grid_start_left + i * 5 + 1))
-            y=$((grid_start_top  + j * 2 + 1))
+            k=$((grid_rows * i + j))
+            x=$((grid_start_col + i * 5 + 1))
+            y=$((grid_start_row  + j * 2 + 1))
             tput cup $y $x
             value=${grid[$k]}
             cfg=${colors_fg[$value]}
@@ -316,15 +368,15 @@ function get_col {
     vals=
     if [ "$rev" -eq 0 ]
     then
-        for row in $(seq 0 $((grid_size_y-1)))
+        for row in $grid_row_loop_fwd
         do
-            k=$((col*grid_size_y+row))
+            k=$((col*grid_rows+row))
             vals="$vals ${grid[$k]}"
         done
     else
-        for row in $(seq $((grid_size_y-1)) -1 0)
+        for row in $grid_row_loop_bwd
         do
-            k=$((col*grid_size_y+row))
+            k=$((col*grid_rows+row))
             vals="$vals ${grid[$k]}"
         done
     fi
@@ -340,15 +392,15 @@ function get_row {
     vals=
     if [ "$rev" -eq 0 ]
     then
-        for col in $(seq 0 $((grid_size_x-1)))
+        for col in $grid_col_loop_fwd
         do
-            k=$((col*grid_size_y+row))
+            k=$((col*grid_rows+row))
             vals="$vals ${grid[$k]}"
         done
     else
-        for col in $(seq $((grid_size_y-1)) -1 0)
+        for col in $grid_col_loop_bwd
         do
-            k=$((col*grid_size_y+row))
+            k=$((col*grid_rows+row))
             vals="$vals ${grid[$k]}"
         done
     fi
@@ -363,9 +415,9 @@ function set_col {
     rev=$3
 
     # Zero out the column.
-    for row in $(seq 0 $((grid_size_y-1)))
+    for row in $grid_row_loop_fwd
     do
-        k=$((col*grid_size_y+row))
+        k=$((col*grid_rows+row))
         grid[$k]=0
     done
 
@@ -373,14 +425,14 @@ function set_col {
     then
         for i in ${!values[*]}
         do
-            k=$((col*grid_size_y+i))
+            k=$((col*grid_rows+i))
             grid[$k]=${values[$i]}
         done
     else
         for i in ${!values[*]}
         do
-            j=$((grid_size_y-i-1))
-            k=$((col*grid_size_y+j))
+            j=$((grid_rows-i-1))
+            k=$((col*grid_rows+j))
             grid[$k]=${values[$i]}
         done
     fi
@@ -393,9 +445,9 @@ function set_row {
     rev=$3
 
     # Zero out the row.
-    for col in $(seq 0 $((grid_size_x-1)))
+    for col in $grid_col_loop_fwd
     do
-        k=$((col*grid_size_y+row))
+        k=$((col*grid_rows+row))
         grid[$k]=0
     done
 
@@ -403,14 +455,14 @@ function set_row {
     then
         for i in ${!values[*]}
         do
-            k=$((i*grid_size_y+row))
+            k=$((i*grid_rows+row))
             grid[$k]=${values[$i]}
         done
     else
         for i in ${!values[*]}
         do
-            j=$((grid_size_x-i-1))
-            k=$((j*grid_size_y+row))
+            j=$((grid_cols-i-1))
+            k=$((j*grid_rows+row))
             grid[$k]=${values[$i]}
         done
     fi
@@ -423,7 +475,7 @@ function make_move {
     where=$1
     case $where in
         up)
-            for col in $(seq 0 $((grid_size_x-1)))
+            for col in $grid_col_loop_fwd
             do
                 values=$(get_col $col 0)
                 new_values=$(merge_values "$values")
@@ -431,7 +483,7 @@ function make_move {
             done
             ;;
         down)
-            for col in $(seq 0 $((grid_size_x-1)))
+            for col in $grid_col_loop_fwd
             do
                 values=$(get_col $col 1)
                 new_values=$(merge_values "$values")
@@ -439,7 +491,7 @@ function make_move {
             done
             ;;
         left)
-            for row in $(seq 0 $((grid_size_y-1)))
+            for row in $grid_row_loop_fwd
             do
                 values=$(get_row $row 0)
                 new_values=$(merge_values "$values")
@@ -447,7 +499,7 @@ function make_move {
             done
             ;;
         right)
-            for row in $(seq 0 $((grid_size_y-1)))
+            for row in $grid_row_loop_fwd
             do
                 values=$(get_row $row 1)
                 new_values=$(merge_values "$values")
@@ -487,12 +539,12 @@ draw_ui
 setup_environment
 
 # Initialize the game.
-new_game 10 10
+new_game 5 5
 
 # The main control loop.
 while :
 do
-    if read -s -N 1 ch
+    if read -s -n 1 ch
     then
         case $ch in
             a)  make_move left ;;
