@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# TODO Make the game-over detection.
+# TODO Simplify the UI.
+# TODO Add parameters from the command line.
+# TODO Add the possibility to save the grid.
+# TODO Keep some user config file with the highest score?
+
 declare -i  nrows
 declare -i  ncols
 declare -ia grid
@@ -15,9 +21,6 @@ declare     grid_row_loop_bwd
 declare     grid_loop
 
 declare -i  score
-
-declare -i  desktop_bg
-declare -i  grid_bg
 
 declare -a  colors_fg
 declare -a  colors_bg
@@ -46,10 +49,16 @@ desktop_bg=0
 titstat_bg=39
 titstat_fg=226
 titstat_highlight_fg=206
+statmsg_bg=124
+statmsg_fg=255
+statmsg_highlight_fg=11
 grid_bg=145
 grid_fg=0
 grid_start_col=6
 grid_start_row=4
+
+grid_rows=6
+grid_cols=6
 
 # Number colors.
 # TODO Instead of X use Y in X=2^Y, Bash can do powers!
@@ -144,15 +153,10 @@ function draw_status {
     tput setaf $titstat_highlight_fg; printf " Q"; tput setaf $titstat_fg; printf "uit "
 }
 
-# Ask for something in the status bar.
-function ask {
-    echo
-}
-
 # Status message.
 function status_msg {
-    tput setab 124
-    tput setaf 255
+    tput setab $statmsg_bg
+    tput setaf $statmsg_fg
     tput cup $((nrows-1)) 0
     printf "%-${ncols}s" "$@"
     tput op
@@ -201,8 +205,7 @@ function draw_ui {
 # Initialize the grid.
 function init_grid {
     # ... Set the number of columns and rows and the total grid size.
-    grid_cols=$1
-    grid_rows=$2
+    #     (grid_rows and grid_cols are set already)
     grid_size=$((grid_cols * grid_rows))
     # ... Create the variables for looping (to avoid all to calls to seq).
     grid_col_loop_fwd=$(seq 0 $((grid_cols-1)))
@@ -529,7 +532,7 @@ function make_move {
 # New game.
 function new_game {
     score=0
-    init_grid $1 $2
+    init_grid
     insert_random 2 "2"
     draw_ui
     draw_grid_frame
@@ -555,7 +558,7 @@ draw_ui
 setup_environment
 
 # Initialize the game.
-new_game 6 6
+new_game
 
 # The main control loop.
 while :
@@ -567,7 +570,7 @@ do
             d)  make_move right ;;
             w)  make_move up ;;
             s)  make_move down ;;
-            n)  new_game 6 6 ;;
+            n)  new_game ;;
             r)  redraw ;;
             q)  quit ;;
         esac
