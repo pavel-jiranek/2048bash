@@ -57,8 +57,8 @@ grid_fg=0
 grid_start_col=6
 grid_start_row=4
 
-grid_rows=6
-grid_cols=6
+grid_rows=4
+grid_cols=4
 
 # Number colors.
 # TODO Instead of X use Y in X=2^Y, Bash can do powers!
@@ -139,6 +139,7 @@ function check_terminal {
 function setup_environment {
     stty -echo                  # Set the terminal properties.
     trap "quit" SIGINT SIGTERM
+    trap "redraw" SIGWINCH
 }
 
 # Draw the status bar.
@@ -524,7 +525,7 @@ function make_move {
             done
             ;;
     esac
-    insert_random 2 "2 4"
+    insert_random 1 "2 4"
     draw_grid
     draw_status
 }
